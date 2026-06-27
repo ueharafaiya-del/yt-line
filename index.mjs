@@ -26,13 +26,13 @@ async function main() {
   if (TESTLINE_IDX !== -1) {
     const url = process.argv[TESTLINE_IDX + 1];
     if (!url) throw new Error('--test-line の後ろに動画URLを指定してください');
-    if (!LINE_TOKEN || !LINE_USER_ID) throw new Error('LINE_TOKEN / LINE_USER_ID が未設定です');
+    if (!LINE_TOKEN) throw new Error('LINE_TOKEN が未設定です');
     await pushLine('🧪 テスト通知\n\n' + await summarize(url));
     console.log('テスト通知を送信しました');
     return;
   }
-  if (!DRY_RUN && (!LINE_TOKEN || !LINE_USER_ID)) {
-    throw new Error('LINE_TOKEN / LINE_USER_ID が未設定です（確認だけなら --dry-run）');
+  if (!DRY_RUN && !LINE_TOKEN) {
+    throw new Error('LINE_TOKEN が未設定です（確認だけなら --dry-run）');
   }
 
   const channels = JSON.parse(await readFile(CHANNELS_PATH, 'utf8'));
@@ -64,7 +64,9 @@ async function main() {
       if (await isShort(v.id)) { console.log(`[short] skip ${v.id}`); continue; }
       try {
         const summary = await summarize(v.url);
-        digest.push(`🎬 ${ch.name || v.author}\n${v.title}\n${v.url}\n\n${summary}`);
+        const when = jst(v.published);
+        const head = `🎬 ${ch.name || v.author}\n${v.title}` + (when ? `\n🕐 ${when}` : '') + `\n${v.url}`;
+        digest.push(`${head}\n\n${summary}`);
         count++;
       } catch (e) { console.error(`[error] ${v.id}: ${e.message}`); }
     }
@@ -129,7 +131,8 @@ async function fetchFeed(channelId) {
     if (!id) continue;
     const title  = decode((block.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '');
     const author = decode((block.match(/<name>([\s\S]*?)<\/name>/) || [])[1] || '');
-    out.push({ id, title, author, url: `https://www.youtube.com/watch?v=${id}` });
+    const published = (block.match(/<published>(.*?)<\/published>/) || [])[1] || '';
+    out.push({ id, title, author, published, url: `https://www.youtube.com/watch?v=${id}` });
   }
   return out;
 }
@@ -137,6 +140,17 @@ async function fetchFeed(channelId) {
 function decode(s) {
   return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
           .replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+}
+
+function jst(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const p = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(d).reduce((o, x) => (o[x.type] = x.value, o), {});
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
 }
 
 async function isShort(videoId) {
@@ -168,10 +182,10 @@ async function summarize(videoUrl) {
 }
 
 async function pushLine(text) {
-  const res = await fetch('https://api.line.me/v2/bot/message/push', {
+  const res = await fetch('https://api.line.me/v2/bot/message/broadcast', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${LINE_TOKEN}` },
-    body: JSON.stringify({ to: LINE_USER_ID, messages: [{ type: 'text', text: text.slice(0, 4900) }] })
+    body: JSON.stringify({ messages: [{ type: 'text', text: text.slice(0, 4900) }] })
   });
   if (!res.ok) throw new Error(`LINE ${res.status}: ${await res.text()}`);
 }
