@@ -1,0 +1,22 @@
+name: test
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'テストする動画URL'
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: node index.mjs --test-line "${{ github.event.inputs.url }}"
