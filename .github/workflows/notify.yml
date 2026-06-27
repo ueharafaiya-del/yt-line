@@ -1,0 +1,41 @@
+name: notify
+
+on:
+  schedule:
+    - cron: '0 21 * * *'  # 06:00 JST
+    - cron: '0 3 * * *'   # 12:00 JST
+    - cron: '0 9 * * *'   # 18:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: notify
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run notifier
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: node index.mjs
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add seen.json
+          if git diff --staged --quiet; then
+            echo "no change"
+          else
+            git commit -m "update seen state"
+            git push
+          fi
